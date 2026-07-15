@@ -118,11 +118,30 @@
       },
       vertexShader: vertexShader,
       fragmentShader: fragmentShader,
-      wireframe: true
+      wireframe: true,      // Disable the wireframe to make the surface solid
+      side: THREE.DoubleSide // Ensures the plane is visible from both top and bottom
     });
 
     const spectrogramMesh = new THREE.Mesh(geometry, material);
     scene.add(spectrogramMesh);
+
+    // Create a dynamic, glowing solid line at the front of the graph
+    const frontLineGeometry = new THREE.BufferGeometry();
+    const frontLinePositions = new Float32Array(freqSamples * 3);
+    for (let i = 0; i < freqSamples; i++) {
+      const x = -width / 2 + (i / (freqSamples - 1)) * width;
+      frontLinePositions[i * 3] = x;     // X position
+      frontLinePositions[i * 3 + 1] = 0; // Y position (will be dynamic)
+      frontLinePositions[i * 3 + 2] = depth / 2 + 0.1; // Z position (slightly in front of grid)
+    }
+    frontLineGeometry.setAttribute('position', new THREE.BufferAttribute(frontLinePositions, 3));
+    
+    const frontLineMaterial = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      linewidth: 10     // Note: some browsers limit line width to 1px depending on OS WebGL drivers
+    });
+    const frontLine = new THREE.Line(frontLineGeometry, frontLineMaterial);
+    scene.add(frontLine);
 
     // Helper to generate a line in 3D space
     function createAxisLine(start, end, colour = 0xffffff) {
@@ -182,11 +201,10 @@
       labelSprites = [];
 
       // 1. X-AXIS LABELS (Frequency)
-      const hzPerBin = audioContext.sampleRate / analyser.fftSize;
-      const numXLabels = 5;
+      const targetFrequency = 10000;
+      const numXLabels = 20; // Reduced slightly for better readability without overlapping
       for (let i = 0; i < numXLabels; i++) {
-        const binIndex = Math.round((i / (numXLabels - 1)) * (freqSamples - 1));
-        const freq = binIndex * hzPerBin;
+        const freq = (i / (numXLabels - 1)) * targetFrequency;
         const labelText = freq < 1000 ? `${Math.round(freq)} Hz` : `${(freq / 1000).toFixed(1)} kHz`;
         
         const x = -width / 2 + (i / (numXLabels - 1)) * width;
@@ -234,7 +252,10 @@
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
         
-        analyser.fftSize = 1024; 
+        analyser.fftSize = 2048; // This will give you 0 Hz to ~40 kHz, which is more than enough to cover 10 kHz.
+        analyser.minDecibels = -100; // This ensures that the frequency bins are mapped correctly and avoids distortion.
+        analyser.maxDecibels = -30;
+
         bufferLength = analyser.frequencyBinCount; 
         dataArray = new Uint8Array(bufferLength);
 
@@ -268,6 +289,10 @@
       if (isRecording && analyser) {
         analyser.getByteFrequencyData(dataArray);
 
+        // Map the frequency range [0, 10kHz] onto the grid's 128 physical samples (downsampling/resampling)
+        const targetFrequency = 10000; // 10 kHz
+        const maxIndex = Math.floor((targetFrequency / audioContext.sampleRate) * analyser.fftSize);
+
         // Shift the old data down in the texture
         for (let i = timeSamples - 1; i > 0; i--) {
           const rowOffset = i * freqSamples * 4;
@@ -277,17 +302,29 @@
           }
         }
 
-        // Copy new cropped frequency bin data into row 0
+        // Copy resampled frequency bin data into row 0
+        const linePositions = frontLineGeometry.attributes.position.array;
         for (let i = 0; i < freqSamples; i++) {
-          const val = dataArray[i]; 
+          // Linearly interpolate/map index mapping from [0, freqSamples] to [0, maxIndex]
+          const mappedIndex = Math.min(
+            Math.floor((i / (freqSamples - 1)) * maxIndex),
+            dataArray.length - 1
+          );
+          const val = dataArray[mappedIndex]; 
+          
           const index = i * 4;
           audioData[index] = val;     // R
           audioData[index + 1] = val; // G
           audioData[index + 2] = val; // B
           audioData[index + 3] = 255; // A
+
+          // Update the front line Y coordinate based on current value
+          const yVal = (val / 255.0) * 25.0;
+          linePositions[i * 3 + 1] = yVal;
         }
         
         dataTexture.needsUpdate = true;
+        frontLineGeometry.attributes.position.needsUpdate = true;
       }
 
       renderer.render(scene, camera);
