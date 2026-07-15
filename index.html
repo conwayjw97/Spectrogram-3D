@@ -31,10 +31,39 @@
       cursor: pointer;
       z-index: 10;
     }
+    /* {{ ADDED: Styles for the frequency range control slider at the bottom }} */
+    #controlContainer {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.85);
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      pointer-events: auto;
+    }
+    #freqSlider {
+      width: 250px;
+      cursor: pointer;
+      accent-color: #fff;
+    }
   </style>
 </head>
 <body>
   <button id="startButton">Start</button>
+  <div id="controlContainer">
+    <label for="freqSlider" id="sliderLabel">Max Frequency: 10.0 kHz</label>
+    <input type="range" id="freqSlider" min="1000" max="22000" step="500" value="10000">
+  </div>
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -56,6 +85,7 @@
     // Audio Setup
     let audioContext, analyser, dataArray, bufferLength;
     let isRecording = false;
+    let targetFrequency = 10000; // {{ CHANGED: Changed to a let variable so it can be dynamically adjusted }}
 
     // Spectrogram Setup
     const timeSamples = 128; // Depth (Time history)
@@ -92,18 +122,26 @@
       varying float vElevation;
 
       void main() {
-        // Clamp intensity between 0.0 and 1.0 based on the maximum elevation (25.0)
         float intensity = clamp(vElevation / 25.0, 0.0, 1.0);
         
-        // Red channel starts ramping up early (fully red by 70% elevation)
-        float r = smoothstep(0.0, 0.7, intensity);
+        // Define high-contrast VU-meter gradient stops:
+        vec3 colorDarkGreen = vec3(0.0, 0.25, 0.0);  // Base/Silent (Prevents blinding green background)
+        vec3 colorNeonGreen = vec3(0.0, 1.0, 0.0);  // Low signal (Electric Green)
+        vec3 colorYellow    = vec3(1.0, 1.0, 0.0);  // Mid signal (Vibrant Yellow)
+        vec3 colorRed       = vec3(1.0, 0.0, 0.0);  // High signal (Hot Red)
         
-        // Green channel stays strong, then fades out at high elevation
-        float g = 1.0 - smoothstep(0.3, 1.0, intensity);
+        vec3 colour;
+        if (intensity < 0.33) {
+          // Dark Green to Neon Green
+          colour = mix(colorDarkGreen, colorNeonGreen, intensity / 0.33);
+        } else if (intensity < 0.66) {
+          // Neon Green to Yellow
+          colour = mix(colorNeonGreen, colorYellow, (intensity - 0.33) / 0.33);
+        } else {
+          // Yellow to Red
+          colour = mix(colorYellow, colorRed, (intensity - 0.66) / 0.34);
+        }
         
-        float b = 0.0;
-        
-        vec3 colour = vec3(r, g, b);
         gl_FragColor = vec4(colour, 1.0);
       }
     `;
@@ -138,10 +176,30 @@
     
     const frontLineMaterial = new THREE.LineBasicMaterial({
       color: 0xffffff,
-      linewidth: 10     // Note: some browsers limit line width to 1px depending on OS WebGL drivers
+      linewidth: 10     
     });
     const frontLine = new THREE.Line(frontLineGeometry, frontLineMaterial);
     scene.add(frontLine);
+
+    // Create a dynamic solid line running along the Z-axis (time history) 
+    const sideLineGeometry = new THREE.BufferGeometry();
+    const sideLinePositions = new Float32Array(timeSamples * 3);
+    const historyAmplitudes = new Float32Array(timeSamples); // Store average amplitude per row
+
+    for (let i = 0; i < timeSamples; i++) {
+      const z = depth / 2 - (i / (timeSamples - 1)) * depth;
+      sideLinePositions[i * 3] = -width / 2 - 0.2; // Slightly offset to the left of the grid
+      sideLinePositions[i * 3 + 1] = 0;            // Y position (will be dynamic history)
+      sideLinePositions[i * 3 + 2] = z;            // Z position
+    }
+    sideLineGeometry.setAttribute('position', new THREE.BufferAttribute(sideLinePositions, 3));
+
+    const sideLineMaterial = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      linewidth: 10
+    });
+    const sideLine = new THREE.Line(sideLineGeometry, sideLineMaterial);
+    scene.add(sideLine);
 
     // Helper to generate a line in 3D space
     function createAxisLine(start, end, colour = 0xffffff) {
@@ -172,6 +230,19 @@
       isRecording = !isRecording;
     });
 
+    // {{ ADDED: Event listener to dynamically handle slider adjustments }}
+    const freqSlider = document.getElementById('freqSlider');
+    const sliderLabel = document.getElementById('sliderLabel');
+    freqSlider.addEventListener('input', (e) => {
+      targetFrequency = parseInt(e.target.value);
+      sliderLabel.textContent = `Max Frequency: ${(targetFrequency / 1000).toFixed(1)} kHz`;
+      
+      // If audio has already started, dynamically refresh the labels
+      if (audioContext && analyser) {
+        generateAllAxisLabels();
+      }
+    });
+
     // Generate dynamic label sprites using Canvas 2D
     function createLabelSprite(text, x, y, z) {
       const canvas = document.createElement('canvas');
@@ -200,9 +271,8 @@
       labelSprites.forEach(sprite => scene.remove(sprite));
       labelSprites = [];
 
-      // 1. X-AXIS LABELS (Frequency)
-      const targetFrequency = 10000;
-      const numXLabels = 20; // Reduced slightly for better readability without overlapping
+      // 1. X-AXIS LABELS (Frequency) - Map directly to the dynamic target limit
+      const numXLabels = 5;
       for (let i = 0; i < numXLabels; i++) {
         const freq = (i / (numXLabels - 1)) * targetFrequency;
         const labelText = freq < 1000 ? `${Math.round(freq)} Hz` : `${(freq / 1000).toFixed(1)} kHz`;
@@ -231,7 +301,6 @@
       }
 
       // 3. Z-AXIS LABELS (Time History Offset)
-      // Assumes roughly 16.67ms per frame (60 FPS default)
       const totalSeconds = (timeSamples * 16.67) / 1000;
       const numZLabels = 5;
       for (let i = 0; i < numZLabels; i++) {
@@ -252,8 +321,8 @@
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
         
-        analyser.fftSize = 2048; // This will give you 0 Hz to ~40 kHz, which is more than enough to cover 10 kHz.
-        analyser.minDecibels = -100; // This ensures that the frequency bins are mapped correctly and avoids distortion.
+        analyser.fftSize = 2048; // Allows high resolution mapping up to ~40kHz sample ceiling
+        analyser.minDecibels = -100;
         analyser.maxDecibels = -30;
 
         bufferLength = analyser.frequencyBinCount; 
@@ -302,7 +371,13 @@
           }
         }
 
+        // Shift the history amplitude data back in time 
+        for (let i = timeSamples - 1; i > 0; i--) {
+          historyAmplitudes[i] = historyAmplitudes[i - 1];
+        }
+
         // Copy resampled frequency bin data into row 0
+        let sumAmplitude = 0;
         const linePositions = frontLineGeometry.attributes.position.array;
         for (let i = 0; i < freqSamples; i++) {
           // Linearly interpolate/map index mapping from [0, freqSamples] to [0, maxIndex]
@@ -311,6 +386,7 @@
             dataArray.length - 1
           );
           const val = dataArray[mappedIndex]; 
+          sumAmplitude += val;
           
           const index = i * 4;
           audioData[index] = val;     // R
@@ -322,9 +398,20 @@
           const yVal = (val / 255.0) * 25.0;
           linePositions[i * 3 + 1] = yVal;
         }
+
+        // Calculate & map the average DB / Amplitude for the newest row 
+        const averageAmplitude = sumAmplitude / freqSamples;
+        historyAmplitudes[0] = (averageAmplitude / 255.0) * 25.0;
+
+        // Update the Z-axis side-line geometry positions based on history 
+        const sidePositions = sideLineGeometry.attributes.position.array;
+        for (let i = 0; i < timeSamples; i++) {
+          sidePositions[i * 3 + 1] = historyAmplitudes[i];
+        }
         
         dataTexture.needsUpdate = true;
         frontLineGeometry.attributes.position.needsUpdate = true;
+        sideLineGeometry.attributes.position.needsUpdate = true;
       }
 
       renderer.render(scene, camera);
