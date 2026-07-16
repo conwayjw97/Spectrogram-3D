@@ -66,6 +66,7 @@ frontLineGeometry.setAttribute('position', new THREE.BufferAttribute(frontLinePo
 const frontLine = new THREE.Line(frontLineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 10 }));
 scene.add(frontLine);
 
+// Left Side Line: Max Amplitude Tracking
 const sideLineGeometry = new THREE.BufferGeometry();
 const sideLinePositions = new Float32Array(timeSamples * 3);
 const historyAmplitudes = new Float32Array(timeSamples);
@@ -77,6 +78,32 @@ for (let i = 0; i < timeSamples; i++) {
 sideLineGeometry.setAttribute('position', new THREE.BufferAttribute(sideLinePositions, 3));
 const sideLine = new THREE.Line(sideLineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 10 }));
 scene.add(sideLine);
+
+// Right Side Line: Average Amplitude Tracking
+const avgSideLineGeometry = new THREE.BufferGeometry();
+const avgSideLinePositions = new Float32Array(timeSamples * 3);
+const historyAvgAmplitudes = new Float32Array(timeSamples);
+for (let i = 0; i < timeSamples; i++) {
+  avgSideLinePositions[i * 3] = width / 2 + 0.2;
+  avgSideLinePositions[i * 3 + 1] = 0;
+  avgSideLinePositions[i * 3 + 2] = depth / 2 - (i / (timeSamples - 1)) * depth;
+}
+avgSideLineGeometry.setAttribute('position', new THREE.BufferAttribute(avgSideLinePositions, 3));
+const avgSideLine = new THREE.Line(avgSideLineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 10 }));
+scene.add(avgSideLine);
+
+// Back Line: Max Spectrogram (Peak Hold) Tracking
+const backLineGeometry = new THREE.BufferGeometry();
+const backLinePositions = new Float32Array(freqSamples * 3);
+const peakSpectrum = new Float32Array(freqSamples);
+for (let i = 0; i < freqSamples; i++) {
+  backLinePositions[i * 3] = -width / 2 + (i / (freqSamples - 1)) * width;
+  backLinePositions[i * 3 + 1] = 0;
+  backLinePositions[i * 3 + 2] = -depth / 2 - 0.2; // Placed at the very back edge
+}
+backLineGeometry.setAttribute('position', new THREE.BufferAttribute(backLinePositions, 3));
+const backLine = new THREE.Line(backLineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 10 }));
+scene.add(backLine);
 
 // 6. Draw Fixed Blueprint Structural Guides
 function createAxisLine(start, end) {
@@ -110,6 +137,7 @@ function animate() {
     const indexRange = Math.max(1, maxIndex - minIndex);
 
     let currentFramePeak = 0;
+    let currentFrameSum = 0;
     const linePositions = frontLineGeometry.attributes.position.array;
 
     // Phase A: Update the front line immediately every frame for maximum responsiveness
@@ -120,9 +148,11 @@ function animate() {
       );
       const val = audioState.dataArray[mappedIndex];
       if (val > currentFramePeak) currentFramePeak = val;
+      currentFrameSum += val;
       
       linePositions[i * 3 + 1] = (val / 255.0) * 25.0;
     }
+    const currentFrameAvg = currentFrameSum / freqSamples;
     frontLineGeometry.attributes.position.needsUpdate = true;
 
     // Phase B: Throttled historical buffer shifts
@@ -145,9 +175,10 @@ function animate() {
         }
       }
 
-      // Roll the side-line amplitude trace array values backward
+      // Roll the left and right side-line amplitude trace array values backward
       for (let i = timeSamples - 1; i > 0; i--) {
         historyAmplitudes[i] = historyAmplitudes[i - 1];
+        historyAvgAmplitudes[i] = historyAvgAmplitudes[i - 1];
       }
 
       // Commit the current resampled snapshot arrays into row index 0
@@ -165,15 +196,38 @@ function animate() {
       }
 
       historyAmplitudes[0] = (currentFramePeak / 255.0) * 25.0;
+      historyAvgAmplitudes[0] = (currentFrameAvg / 255.0) * 25.0;
+
+      // Calculate Peak Hold (Max Spectrogram) across all active historical slices
+      for (let j = 0; j < freqSamples; j++) {
+        let maxBinVal = 0;
+        for (let i = 0; i < timeSamples; i++) {
+          const rowOffset = i * freqSamples * 4;
+          const val = audioData[rowOffset + j * 4];
+          if (val > maxBinVal) maxBinVal = val;
+        }
+        peakSpectrum[j] = (maxBinVal / 255.0) * 25.0;
+      }
+
       dataTexture.needsUpdate = true;
     }
 
-    // Phase C: Redraw side-line profiles matching historical indices
+    // Phase C: Redraw side-line profiles and back peak-hold spectrum
     const sidePositions = sideLineGeometry.attributes.position.array;
+    const avgSidePositions = avgSideLineGeometry.attributes.position.array;
+    const backPositions = backLineGeometry.attributes.position.array;
+
     for (let i = 0; i < timeSamples; i++) {
       sidePositions[i * 3 + 1] = historyAmplitudes[i];
+      avgSidePositions[i * 3 + 1] = historyAvgAmplitudes[i];
     }
+    for (let i = 0; i < freqSamples; i++) {
+      backPositions[i * 3 + 1] = peakSpectrum[i];
+    }
+
     sideLineGeometry.attributes.position.needsUpdate = true;
+    avgSideLineGeometry.attributes.position.needsUpdate = true;
+    backLineGeometry.attributes.position.needsUpdate = true;
   }
 
   renderer.render(scene, camera);

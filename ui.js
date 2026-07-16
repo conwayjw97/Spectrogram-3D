@@ -5,10 +5,10 @@ let labelSprites = [];
 let currentScene = null;
 let uiConfig = {};
 
-function createLabelSprite(text, x, y, z) {
+function createLabelSprite(text, x, y, z, customWidth = 128, customHeight = 32) {
   const canvas = document.createElement('canvas');
-  canvas.width = 128; 
-  canvas.height = 32;
+  canvas.width = customWidth; 
+  canvas.height = customHeight;
   const ctx = canvas.getContext('2d');
   
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -23,14 +23,15 @@ function createLabelSprite(text, x, y, z) {
   const sprite = new THREE.Sprite(spriteMaterial);
   
   sprite.position.set(x, y, z);
-  sprite.scale.set(10, 2.5, 1);
+  sprite.scale.set(customWidth / 12.8, customHeight / 12.8, 1);
   return sprite;
 }
 
 export function generateAllAxisLabels() {
   if (!currentScene || !audioState.analyser) return;
 
-  labelSprites.forEach(sprite => currentScene.remove(sprite));
+  // Clean up all previously rendered sprites, corner lines, and floor boundaries
+  labelSprites.forEach(obj => currentScene.remove(obj));
   labelSprites = [];
 
   const { width, depth } = uiConfig;
@@ -43,7 +44,7 @@ export function generateAllAxisLabels() {
     const text = freq < 1000 ? `${Math.round(freq)} Hz` : `${(freq / 1000).toFixed(1)} kHz`;
     const x = -width / 2 + (i / (numXLabels - 1)) * width;
     
-    const sprite = createLabelSprite(text, x, 1.5, depth / 2 + 5);
+    const sprite = createLabelSprite(text, x, 1.5, depth / 2 + 5, 128, 32);
     currentScene.add(sprite); 
     labelSprites.push(sprite);
   }
@@ -55,22 +56,80 @@ export function generateAllAxisLabels() {
     const text = `${Math.round(audioState.analyser.minDecibels + fraction * dbRange)} dB`;
     const y = fraction * 25; 
     
-    const sprite = createLabelSprite(text, -width / 2 - 8, y, depth / 2 + 1);
+    const sprite = createLabelSprite(text, -width / 2 - 8, y, depth / 2 + 1, 128, 32);
     currentScene.add(sprite); 
     labelSprites.push(sprite);
   }
 
-  // 3. Timeline Labels (Z-Axis)
+  // 3. Timeline Labels (Z-Axis) - Moved closer from -8 to -4
   const totalSeconds = audioState.timeWindow;
   for (let i = 0; i < 5; i++) {
     const fraction = i / 4;
     const text = fraction === 0 ? 'Now' : `-${(fraction * totalSeconds).toFixed(1)}s`;
     const z = depth / 2 - fraction * depth;
     
-    const sprite = createLabelSprite(text, -width / 2 - 8, 1.5, z);
+    const sprite = createLabelSprite(text, -width / 2 - 4, 1.5, z, 128, 32);
     currentScene.add(sprite); 
     labelSprites.push(sprite);
   }
+
+  // 4. Explanatory Labels
+  // Front: Current Spectrogram
+  const currentSpecLabel = createLabelSprite('Current Spectrogram', 0, 1.5, depth / 2 + 10, 256, 32);
+  currentScene.add(currentSpecLabel);
+  labelSprites.push(currentSpecLabel);
+
+  // Back: Max Spectrogram (Peak Hold)
+  const maxSpecLabel = createLabelSprite('Max Spectrogram (Peak Hold)', 0, 1.5, -depth / 2 - 10, 256, 32);
+  currentScene.add(maxSpecLabel);
+  labelSprites.push(maxSpecLabel);
+
+  // Left Z-Axis label: Max Amplitude - Moved closer from -24 to -14
+  const zSpecLabel = createLabelSprite('Max Amplitude', -width / 2 - 14, 1.5, 0, 256, 32);
+  currentScene.add(zSpecLabel);
+  labelSprites.push(zSpecLabel);
+
+  // Right Z-Axis label: Average Amplitude - Moved closer from 24 to 14
+  const zAverageSpecLabel = createLabelSprite('Average Amplitude', width / 2 + 14, 1.5, 0, 256, 32);
+  currentScene.add(zAverageSpecLabel);
+  labelSprites.push(zAverageSpecLabel);
+
+  // 5. Vertical Corner Lines (White, matching the main DB/Amplitude line on the front-left)
+  const verticalCorners = [
+    { x: -width / 2, z: -depth / 2 }, // Back-Left
+    { x: width / 2, z: -depth / 2 },  // Back-Right
+    { x: width / 2, z: depth / 2 }    // Front-Right
+  ];
+
+  verticalCorners.forEach(corner => {
+    const points = [
+      new THREE.Vector3(corner.x, 0, corner.z),
+      new THREE.Vector3(corner.x, 25, corner.z)
+    ];
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+    const line = new THREE.Line(geometry, material);
+    
+    currentScene.add(line);
+    labelSprites.push(line);
+  });
+
+  // 6. Bottom Boundary Lines (Completes the floor frame on the Back and Right sides)
+  const bottomEdges = [
+    // Back Boundary Edge: runs from Back-Left to Back-Right
+    [new THREE.Vector3(-width / 2, 0, -depth / 2), new THREE.Vector3(width / 2, 0, -depth / 2)],
+    // Right Boundary Edge: runs from Front-Right to Back-Right
+    [new THREE.Vector3(width / 2, 0, depth / 2), new THREE.Vector3(width / 2, 0, -depth / 2)]
+  ];
+
+  bottomEdges.forEach(edgePoints => {
+    const geometry = new THREE.BufferGeometry().setFromPoints(edgePoints);
+    const material = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+    const line = new THREE.Line(geometry, material);
+    
+    currentScene.add(line);
+    labelSprites.push(line);
+  });
 }
 
 export function initUI(scene, config) {
@@ -86,7 +145,6 @@ export function initUI(scene, config) {
   const timeSlider = document.getElementById('timeSlider');
   const timeLabel = document.getElementById('timeLabel');
 
-  // Programmatic fallback to ensure the select element matches our JS default state on refresh
   sourceSelect.value = audioState.sourceType || 'mic';
 
   startButton.addEventListener('click', () => {
