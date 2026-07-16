@@ -14,7 +14,7 @@ Hosted version: https://conwayjw97.github.io/Spectrogram-3D/
 * **Interactive Viewport:** Built-in `OrbitControls` let you rotate, pan, and zoom to inspect the frequency terrain from any angle.
 * **Real-time Edge Analysis:**
   * **Front (X-Axis):** Active real-time frequency spectrum.
-  * **Back (Peak Hold):** A historic maximum spectrum (Peak Hold) trace that maps transient peaks over the full time window.
+  * **Back (X-Axis):** A historic maximum spectrum (Peak Hold) trace that maps transient peaks over the full time window.
   * **Left (Z-Axis):** Maximum historical amplitude trace over time.
   * **Right (Z-Axis):** Average historical amplitude trace over time.
 * **Dynamic Billboard Labels:** Auto-orienting 2D labels that scale dynamically, detailing active frequencies (Hz/kHz), decibels (dB), and time history.
