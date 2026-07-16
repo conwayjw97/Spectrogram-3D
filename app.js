@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { vertexShader, fragmentShader, wireFragmentShader } from './shaders.js';
+import { vertexShader, solidFragmentShader, wireFragmentShader } from './shaders.js';
 import { audioState } from './audio.js';
 import { initUI } from './ui.js';
 
@@ -39,7 +39,8 @@ geometry.rotateX(-Math.PI / 2);
 
 const solidMesh = new THREE.Mesh(geometry, new THREE.ShaderMaterial({
   uniforms: { u_audioTexture: { value: dataTexture } },
-  vertexShader, fragmentShader,
+  vertexShader, 
+  fragmentShader: solidFragmentShader,
   side: THREE.DoubleSide,
   polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
 }));

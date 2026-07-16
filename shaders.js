@@ -14,7 +14,7 @@ export const vertexShader = `
   }
 `;
 
-export const fragmentShader = `
+export const solidFragmentShader = `
   varying float vElevation;
 
   void main() {
