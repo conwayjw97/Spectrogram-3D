@@ -135,10 +135,20 @@
         <option value="tab">Browser Tab</option>
       </select>
     </div>
+
+    <div class="divider"></div>
+    
     <div class="slider-group">
       <label id="precisionLabel" for="precisionSlider">Mesh Precision: 128x128</label>
       <input type="range" id="precisionSlider" min="64" max="1024" step="64" value="128">
     </div>
+    <div class="select-group">
+      <label for="wireframeToggle">Show Wireframe:</label>
+      <input type="checkbox" id="wireframeToggle" checked>
+    </div>
+
+    <div class="divider"></div>
+
     <div class="slider-group">
       <label for="minFreqSlider" id="minFreqLabel">Min Frequency: 0 Hz</label>
       <input type="range" id="minFreqSlider" min="0" max="9000" step="500" value="0">
@@ -150,10 +160,6 @@
     <div class="slider-group">
       <label for="timeSlider" id="timeLabel">Time Window: 2.0s</label>
       <input type="range" id="timeSlider" min="2" max="15" step="0.5" value="2">
-    </div>
-    <div class="select-group">
-      <label for="wireframeToggle">Show Wireframe:</label>
-      <input type="checkbox" id="wireframeToggle" checked>
     </div>
 
     <div class="divider"></div>
