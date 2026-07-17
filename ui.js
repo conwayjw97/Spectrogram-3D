@@ -37,16 +37,22 @@ export function generateAllAxisLabels() {
   const { width, depth } = uiConfig;
 
   // 1. Frequency Labels (X-Axis)
-  const numXLabels = 5;
+  const numXLabels = 10;
   const freqSpan = (audioState.targetFrequency || 10000) - (audioState.minFrequency || 0);
   for (let i = 0; i < numXLabels; i++) {
     const freq = (audioState.minFrequency || 0) + (i / (numXLabels - 1)) * freqSpan;
     const text = freq < 1000 ? `${Math.round(freq)} Hz` : `${(freq / 1000).toFixed(1)} kHz`;
     const x = -width / 2 + (i / (numXLabels - 1)) * width;
     
-    const sprite = createLabelSprite(text, x, 1.5, depth / 2 + 5, 128, 32);
-    currentScene.add(sprite); 
-    labelSprites.push(sprite);
+    // Front edge frequency label
+    const spriteFront = createLabelSprite(text, x, 1.5, depth / 2 + 5, 128, 32);
+    currentScene.add(spriteFront); 
+    labelSprites.push(spriteFront);
+
+    // Back edge (opposite side) frequency label
+    const spriteBack = createLabelSprite(text, x, 1.5, -depth / 2 - 5, 128, 32);
+    currentScene.add(spriteBack); 
+    labelSprites.push(spriteBack);
   }
 
   // 2. Amplitude Labels (Y-Axis)
@@ -56,9 +62,15 @@ export function generateAllAxisLabels() {
     const text = `${Math.round(audioState.analyser.minDecibels + fraction * dbRange)} dB`;
     const y = fraction * 25; 
     
-    const sprite = createLabelSprite(text, -width / 2 - 8, y, depth / 2 + 1, 128, 32);
-    currentScene.add(sprite); 
-    labelSprites.push(sprite);
+    // Left-front amplitude label
+    const spriteLeftFront = createLabelSprite(text, -width / 2 - 8, y, depth / 2 + 1, 128, 32);
+    currentScene.add(spriteLeftFront); 
+    labelSprites.push(spriteLeftFront);
+
+    // Right-back (opposite corner) amplitude label
+    const spriteRightBack = createLabelSprite(text, width / 2 + 8, y, -depth / 2 - 1, 128, 32);
+    currentScene.add(spriteRightBack); 
+    labelSprites.push(spriteRightBack);
   }
 
   // 3. Timeline Labels (Z-Axis) - Moved closer from -8 to -4
@@ -68,9 +80,15 @@ export function generateAllAxisLabels() {
     const text = fraction === 0 ? 'Now' : `-${(fraction * totalSeconds).toFixed(1)}s`;
     const z = depth / 2 - fraction * depth;
     
-    const sprite = createLabelSprite(text, -width / 2 - 4, 1.5, z, 128, 32);
-    currentScene.add(sprite); 
-    labelSprites.push(sprite);
+    // Left side timeline label
+    const spriteLeftTimeline = createLabelSprite(text, -width / 2 - 4, 1.5, z, 128, 32);
+    currentScene.add(spriteLeftTimeline); 
+    labelSprites.push(spriteLeftTimeline);
+
+    // Right side (opposite side) timeline label
+    const spriteRightTimeline = createLabelSprite(text, width / 2 + 4, 1.5, z, 128, 32);
+    currentScene.add(spriteRightTimeline); 
+    labelSprites.push(spriteRightTimeline);
   }
 
   // 4. Explanatory Labels
@@ -96,6 +114,7 @@ export function generateAllAxisLabels() {
 
   // 5. Vertical Corner Lines (White, matching the main DB/Amplitude line on the front-left)
   const verticalCorners = [
+    { x: -width / 2, z: depth / 2 },  // Front-Left
     { x: -width / 2, z: -depth / 2 }, // Back-Left
     { x: width / 2, z: -depth / 2 },  // Back-Right
     { x: width / 2, z: depth / 2 }    // Front-Right

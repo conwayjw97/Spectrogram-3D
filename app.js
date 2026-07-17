@@ -111,7 +111,6 @@ function createAxisLine(start, end) {
   scene.add(new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffffff })));
 }
 createAxisLine([-width / 2, 0.1, depth / 2], [width / 2, 0.1, depth / 2]);
-createAxisLine([-width / 2, 0, depth / 2], [-width / 2, 25, depth / 2]);
 createAxisLine([-width / 2, 0.1, depth / 2], [-width / 2, 0.1, -depth / 2]);
 
 // 7. Initialise User Controls
