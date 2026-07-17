@@ -235,15 +235,18 @@ function animate() {
     timeAccumulator += delta;
 
     const targetInterval = (audioState.timeWindow * 1000) / timeSamples;
+    let updatedThisFrame = false;
 
-    if (timeAccumulator >= targetInterval) {
-      timeAccumulator = timeAccumulator % targetInterval;
+    // Process all units of elapsed time that built up during this frame step
+    while (timeAccumulator >= targetInterval) {
+      timeAccumulator -= targetInterval;
+      updatedThisFrame = true;
 
-      // Advance circular ring buffer row pointer instead of copying memory back
+      // Advance circular ring buffer row pointer
       writeIndex = (writeIndex + 1) % timeSamples;
       const rowOffset = writeIndex * freqSamples * 4;
 
-      // Roll the 1D side-line array values backward (highly performant compared to 2D arrays)
+      // Roll the 1D side-line array values backward
       for (let i = timeSamples - 1; i > 0; i--) {
         historyAmplitudes[i] = historyAmplitudes[i - 1];
         historyAvgAmplitudes[i] = historyAvgAmplitudes[i - 1];
@@ -265,7 +268,10 @@ function animate() {
 
       historyAmplitudes[0] = (currentFramePeak / 255.0) * 25.0;
       historyAvgAmplitudes[0] = (currentFrameAvg / 255.0) * 25.0;
+    }
 
+    // Only recalculate layout uniforms and textures once per frame update
+    if (updatedThisFrame) {
       // Calculate Peak Hold across the circular grid
       for (let j = 0; j < freqSamples; j++) {
         let maxBinVal = 0;
