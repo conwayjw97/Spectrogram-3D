@@ -8,7 +8,11 @@ export const audioState = {
   timeWindow: 2.0,
   sourceType: 'mic',    
   activeStream: null,    
-  showWireframe: true 
+  showWireframe: true,
+  showTopLines: false,           
+  showBlueprintLines: true,      
+  axisLinesOnly: false,          
+  disableAllLinesLabels: false   
 };
 
 export async function startAudio(onSuccess) {
@@ -45,7 +49,7 @@ export async function startAudio(onSuccess) {
           throw new Error(
             'Firefox does not support capturing browser tab or system audio. ' +
             'Please run this visualiser in a Chromium-based browser (such as Chrome or Edge) to share tab audio, ' +
-            'or switch your Audio Source back to "Audio Input".'
+            'or switch your Audio Source back to "Microphone".'
           );
         } else {
           throw new Error(

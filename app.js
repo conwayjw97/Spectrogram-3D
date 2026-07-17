@@ -23,26 +23,19 @@ let freqSamples = 128;
 const width = 100;
 const depth = 100;
 
-// Delta Time Capture Tracking Parameters
 let lastTime = performance.now();
 let timeAccumulator = 0;
-
-// Circular Buffer Tracking Pointer
 let writeIndex = 0;
 
-// Global Allocations for Visual Elements
 let audioData, dataTexture, geometry, solidMesh, wireframeMesh;
 let frontLine, frontLineGeometry;
 let sideLine, sideLineGeometry, historyAmplitudes;
 let avgSideLine, avgSideLineGeometry, historyAvgAmplitudes;
 let backLine, backLineGeometry, peakSpectrum;
-
-// Persistent cache to smoothly blend historical frames over the time axis
 let previousFrameData = null;
 
 // 3. Reusable Visualiser Element Lifecycle Setup
 function setupVisualiserElements() {
-  // Clear existing items from the scene if they exist
   if (solidMesh) scene.remove(solidMesh);
   if (wireframeMesh) scene.remove(wireframeMesh);
   if (frontLine) scene.remove(frontLine);
@@ -50,7 +43,6 @@ function setupVisualiserElements() {
   if (avgSideLine) scene.remove(avgSideLine);
   if (backLine) scene.remove(backLine);
 
-  // Explicitly dispose geometries and textures to avoid GPU memory leaks
   if (geometry) geometry.dispose();
   if (dataTexture) dataTexture.dispose();
   if (frontLineGeometry) frontLineGeometry.dispose();
@@ -58,21 +50,17 @@ function setupVisualiserElements() {
   if (avgSideLineGeometry) avgSideLineGeometry.dispose();
   if (backLineGeometry) backLineGeometry.dispose();
 
-  // Reset circular pointer and frame history caches on reallocation
   writeIndex = 0;
   previousFrameData = new Float32Array(freqSamples);
 
-  // Re-allocate Audio Texture Map Configuration
   const size = timeSamples * freqSamples;
   audioData = new Uint8Array(4 * size);
   
   dataTexture = new THREE.DataTexture(audioData, freqSamples, timeSamples, THREE.RGBAFormat);
-  // Enable bilinear filtering to smooth out samples between texture pixels
   dataTexture.minFilter = THREE.LinearFilter;
   dataTexture.magFilter = THREE.LinearFilter;
   dataTexture.needsUpdate = true;
 
-  // Re-assemble Main Dual Mesh Terrain Layouts with dynamic uniforms
   geometry = new THREE.PlaneGeometry(width, depth, freqSamples - 1, timeSamples - 1);
   geometry.rotateX(-Math.PI / 2);
 
@@ -92,7 +80,6 @@ function setupVisualiserElements() {
   solidMesh.material.uniforms.u_audioTexture.value = dataTexture;
   scene.add(solidMesh);
 
-  // Re-construct Live Monitoring Front Line
   frontLineGeometry = new THREE.BufferGeometry();
   const frontLinePositions = new Float32Array(freqSamples * 3);
   for (let i = 0; i < freqSamples; i++) {
@@ -104,7 +91,6 @@ function setupVisualiserElements() {
   frontLine = new THREE.Line(frontLineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 10 }));
   scene.add(frontLine);
 
-  // Re-construct Left Side Line (Max Amplitude)
   sideLineGeometry = new THREE.BufferGeometry();
   const sideLinePositions = new Float32Array(timeSamples * 3);
   historyAmplitudes = new Float32Array(timeSamples);
@@ -117,7 +103,6 @@ function setupVisualiserElements() {
   sideLine = new THREE.Line(sideLineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 10 }));
   scene.add(sideLine);
 
-  // Re-construct Right Side Line (Average Amplitude)
   avgSideLineGeometry = new THREE.BufferGeometry();
   const avgSideLinePositions = new Float32Array(timeSamples * 3);
   historyAvgAmplitudes = new Float32Array(timeSamples);
@@ -130,7 +115,6 @@ function setupVisualiserElements() {
   avgSideLine = new THREE.Line(avgSideLineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 10 }));
   scene.add(avgSideLine);
 
-  // Re-construct Back Line (Max Spectrogram Peak Hold)
   backLineGeometry = new THREE.BufferGeometry();
   const backLinePositions = new Float32Array(freqSamples * 3);
   peakSpectrum = new Float32Array(freqSamples);
@@ -159,25 +143,46 @@ function setupVisualiserElements() {
     wireframe: true, side: THREE.DoubleSide, transparent: true
   }));
   wireframeMesh.material.uniforms.u_audioTexture.value = dataTexture;
-
   wireframeMesh.visible = audioState.showWireframe;
   scene.add(wireframeMesh);
 }
 
-// Initial Generation Call
 setupVisualiserElements();
 
 // 4. Draw Fixed Blueprint Structural Guides
-function createAxisLine(start, end) {
-  const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...start), new THREE.Vector3(...end)]);
-  scene.add(new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffffff })));
-}
-createAxisLine([-width / 2, 0.1, depth / 2], [width / 2, 0.1, depth / 2]);
-createAxisLine([-width / 2, 0, depth / 2], [-width / 2, 25, depth / 2]);
-createAxisLine([-width / 2, 0.1, depth / 2], [-width / 2, 0.1, -depth / 2]);
+const axisLinesGroup = new THREE.Group();
+const boxLinesGroup = new THREE.Group();
+const topLinesGroup = new THREE.Group();
+scene.add(axisLinesGroup);
+scene.add(boxLinesGroup);
+scene.add(topLinesGroup);
 
-// 5. Initialise User Controls & Precision Listener
-initUI(scene, { width, depth, freqSamples, timeSamples });
+function createAxisLine(start, end, targetGroup) {
+  const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...start), new THREE.Vector3(...end)]);
+  const line = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 }));
+  targetGroup.add(line);
+}
+
+// Minimal Primary Structural Axes
+createAxisLine([-width / 2, 0,  depth / 2], [ width / 2, 0,  depth / 2], axisLinesGroup); // X Axis
+createAxisLine([-width / 2, 0,  depth / 2], [-width / 2, 25,  depth / 2], axisLinesGroup); // Y Axis
+createAxisLine([-width / 2, 0, -depth / 2], [-width / 2, 0,  depth / 2], axisLinesGroup); // Z Axis
+
+// Outer Blueprint Framing Extensions
+createAxisLine([ width / 2, 0,  depth / 2], [ width / 2, 0, -depth / 2], boxLinesGroup);    // Right floor boundary
+createAxisLine([ width / 2, 0, -depth / 2], [-width / 2, 0, -depth / 2], boxLinesGroup);    // Back floor boundary
+createAxisLine([-width / 2, 0, -depth / 2], [-width / 2, 25, -depth / 2], boxLinesGroup);   // Back-Left pillar
+createAxisLine([ width / 2, 0, -depth / 2], [ width / 2, 25, -depth / 2], boxLinesGroup);   // Back-Right pillar
+createAxisLine([ width / 2, 0,  depth / 2], [ width / 2, 25,  depth / 2], boxLinesGroup);   // Front-Right pillar
+
+// Upper Structural Bounds (y = 25 Ceiling Perimeter)
+createAxisLine([-width / 2, 25,  depth / 2], [ width / 2, 25,  depth / 2], topLinesGroup);   // Front top
+createAxisLine([ width / 2, 25,  depth / 2], [ width / 2, 25, -depth / 2], topLinesGroup);   // Right top
+createAxisLine([ width / 2, 25, -depth / 2], [-width / 2, 25, -depth / 2], topLinesGroup);   // Back top
+createAxisLine([-width / 2, 25, -depth / 2], [-width / 2, 25,  depth / 2], topLinesGroup);   // Left top
+
+// 5. Initialise User Controls & Precision Listener (Pass line containers down)
+initUI(scene, { width, depth, freqSamples, timeSamples }, { axisLinesGroup, boxLinesGroup, topLinesGroup });
 
 const precisionSlider = document.getElementById('precisionSlider');
 const precisionLabel = document.getElementById('precisionLabel');
@@ -216,7 +221,6 @@ function animate() {
     const maxIndex = Math.floor((audioState.targetFrequency / audioState.context.sampleRate) * audioState.analyser.fftSize);
     const indexRange = Math.max(1, maxIndex - minIndex);
 
-    // Generate a smoothly interpolated snapshot of the current frame's frequency data
     const currentFrameData = new Float32Array(freqSamples);
     let currentFramePeak = 0;
     let currentFrameSum = 0;
@@ -228,7 +232,6 @@ function animate() {
       const indexHigh = Math.min(indexLow + 1, audioState.dataArray.length - 1);
       const weight = continuousIndex - indexLow;
       
-      // Perform Linear Interpolation (lerp) across the frequency arrays
       const val = audioState.dataArray[indexLow] * (1.0 - weight) + audioState.dataArray[indexHigh] * weight;
       
       currentFrameData[i] = val;
@@ -248,30 +251,24 @@ function animate() {
     const targetInterval = (audioState.timeWindow * 1000) / timeSamples;
     let updatedThisFrame = false;
 
-    // Calculate total upcoming intervals matching this frame step for time interpolation
     const stepsToTake = Math.floor(timeAccumulator / targetInterval);
     let stepCount = 0;
 
-    // Process all units of elapsed time that built up during this frame step
     while (timeAccumulator >= targetInterval) {
       timeAccumulator -= targetInterval;
       updatedThisFrame = true;
       stepCount++;
 
-      // Advance circular ring buffer row pointer
       writeIndex = (writeIndex + 1) % timeSamples;
       const rowOffset = writeIndex * freqSamples * 4;
 
-      // Roll the 1D side-line array values backward
       for (let i = timeSamples - 1; i > 0; i--) {
         historyAmplitudes[i] = historyAmplitudes[i - 1];
         historyAvgAmplitudes[i] = historyAvgAmplitudes[i - 1];
       }
 
-      // Linear blend factor handling historical rows matching fractional elapsed frame rendering times
       const t = stepsToTake > 0 ? stepCount / stepsToTake : 1.0;
 
-      // Commit the blended, smooth snapshot into the designated circular row index
       for (let i = 0; i < freqSamples; i++) {
         const val = previousFrameData[i] * (1.0 - t) + currentFrameData[i] * t;
         const index = rowOffset + (i * 4);
@@ -285,11 +282,9 @@ function animate() {
       historyAvgAmplitudes[0] = (currentFrameAvg / 255.0) * 25.0;
     }
 
-    // Preserve current processed state data across animation boundaries
     previousFrameData.set(currentFrameData);
 
     if (updatedThisFrame) {
-      // Calculate Peak Hold across the circular grid
       for (let j = 0; j < freqSamples; j++) {
         let maxBinVal = 0;
         for (let i = 0; i < timeSamples; i++) {

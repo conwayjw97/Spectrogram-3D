@@ -4,6 +4,7 @@ import { audioState, startAudio, stopAudio } from './audio.js';
 let labelSprites = [];
 let currentScene = null;
 let uiConfig = {};
+let runtimeLineGroups = {};
 
 function createLabelSprite(text, x, y, z, customWidth = 128, customHeight = 32) {
   const canvas = document.createElement('canvas');
@@ -25,6 +26,31 @@ function createLabelSprite(text, x, y, z, customWidth = 128, customHeight = 32) 
   sprite.position.set(x, y, z);
   sprite.scale.set(customWidth / 12.8, customHeight / 12.8, 1);
   return sprite;
+}
+
+// Consolidated Visibility Synchronisation Logic 
+export function syncVisualGuides() {
+  const { axisLinesGroup, boxLinesGroup, topLinesGroup } = runtimeLineGroups;
+
+  if (audioState.disableAllLinesLabels) {
+    // Hide absolutely everything
+    if (axisLinesGroup) axisLinesGroup.visible = false;
+    if (boxLinesGroup) boxLinesGroup.visible = false;
+    if (topLinesGroup) topLinesGroup.visible = false;
+    labelSprites.forEach(sprite => sprite.visible = false);
+  } else if (audioState.axisLinesOnly) {
+    // Restrict display strictly to core structural axes
+    if (axisLinesGroup) axisLinesGroup.visible = true;
+    if (boxLinesGroup) boxLinesGroup.visible = false;
+    if (topLinesGroup) topLinesGroup.visible = false;
+    labelSprites.forEach(sprite => sprite.visible = true);
+  } else {
+    // Evaluate standard modular menu configurations
+    if (axisLinesGroup) axisLinesGroup.visible = true;
+    if (boxLinesGroup) boxLinesGroup.visible = audioState.showBlueprintLines;
+    if (topLinesGroup) topLinesGroup.visible = audioState.showBlueprintLines && audioState.showTopLines;
+    labelSprites.forEach(sprite => sprite.visible = true);
+  }
 }
 
 export function generateAllAxisLabels() {
@@ -101,46 +127,14 @@ export function generateAllAxisLabels() {
   currentScene.add(zAverageSpecLabel);
   labelSprites.push(zAverageSpecLabel);
 
-  // 5. Vertical Corner Lines
-  const verticalCorners = [
-    { x: -width / 2, z: depth / 2 },  
-    { x: -width / 2, z: -depth / 2 }, 
-    { x: width / 2, z: -depth / 2 },  
-    { x: width / 2, z: depth / 2 }    
-  ];
-
-  verticalCorners.forEach(corner => {
-    const points = [
-      new THREE.Vector3(corner.x, 0, corner.z),
-      new THREE.Vector3(corner.x, 25, corner.z)
-    ];
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
-    const line = new THREE.Line(geometry, material);
-    
-    currentScene.add(line);
-    labelSprites.push(line);
-  });
-
-  // 6. Bottom Boundary Lines
-  const bottomEdges = [
-    [new THREE.Vector3(-width / 2, 0, -depth / 2), new THREE.Vector3(width / 2, 0, -depth / 2)],
-    [new THREE.Vector3(width / 2, 0, depth / 2), new THREE.Vector3(width / 2, 0, -depth / 2)]
-  ];
-
-  bottomEdges.forEach(edgePoints => {
-    const geometry = new THREE.BufferGeometry().setFromPoints(edgePoints);
-    const material = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
-    const line = new THREE.Line(geometry, material);
-    
-    currentScene.add(line);
-    labelSprites.push(line);
-  });
+  // Re-apply visibility checks onto elements following recalculations
+  syncVisualGuides();
 }
 
-export function initUI(scene, config) {
+export function initUI(scene, config, lineGroups = {}) {
   currentScene = scene;
   uiConfig = config;
+  runtimeLineGroups = lineGroups;
 
   const startButton = document.getElementById('startButton');
   const sourceSelect = document.getElementById('sourceSelect');
@@ -152,7 +146,23 @@ export function initUI(scene, config) {
   const timeLabel = document.getElementById('timeLabel');
   const wireframeToggle = document.getElementById('wireframeToggle');
 
+  // Allocate new consolidated guide control dropdown selection
+  const visualisationSelect = document.getElementById('visualisationSelect');
+
   sourceSelect.value = audioState.sourceType || 'mic';
+
+  // Synchronise initial dropdown selection state to match incoming audioState flags
+  if (visualisationSelect) {
+    if (audioState.disableAllLinesLabels) {
+      visualisationSelect.value = 'none';
+    } else if (audioState.axisLinesOnly) {
+      visualisationSelect.value = 'axis';
+    } else if (audioState.showBlueprintLines && audioState.showTopLines) {
+      visualisationSelect.value = 'ceiling';
+    } else {
+      visualisationSelect.value = 'blueprint';
+    }
+  }
 
   startButton.addEventListener('click', () => {
     if (!audioState.isRecording) {
@@ -219,4 +229,38 @@ export function initUI(scene, config) {
   wireframeToggle.addEventListener('change', (e) => {
     audioState.showWireframe = e.target.checked;
   });
+
+  // Handle mode selections via the dropdown node element
+  if (visualisationSelect) {
+    visualisationSelect.addEventListener('change', (e) => {
+      const mode = e.target.value;
+
+      // Reset all guide flag states to false initially
+      audioState.showBlueprintLines = false;
+      audioState.showTopLines = false;
+      audioState.axisLinesOnly = false;
+      audioState.disableAllLinesLabels = false;
+
+      switch (mode) {
+        case 'blueprint':
+          audioState.showBlueprintLines = true;
+          break;
+        case 'ceiling':
+          audioState.showBlueprintLines = true;
+          audioState.showTopLines = true;
+          break;
+        case 'axis':
+          audioState.axisLinesOnly = true;
+          break;
+        case 'none':
+          audioState.disableAllLinesLabels = true;
+          break;
+      }
+
+      syncVisualGuides();
+    });
+  }
+
+  // Set default state parameters during page initialisation
+  syncVisualGuides();
 }
