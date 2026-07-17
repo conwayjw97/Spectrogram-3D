@@ -4,9 +4,9 @@ A real-time, hardware-accelerated 3D audio spectrogram visualiser that renders i
 
 <img width="1428" height="1117" alt="image" src="https://github.com/user-attachments/assets/93ec908f-b5a6-45f8-9f1b-400906ed8c1f" />
 
-## Try it out
+## Live Version
 
-Hosted version: https://conwayjw97.github.io/Spectrogram-3D/
+https://conwayjw97.github.io/Spectrogram-3D/
 
 ## Key Features
 
