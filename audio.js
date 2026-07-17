@@ -6,9 +6,9 @@ export const audioState = {
   minFrequency: 0,
   targetFrequency: 10000,
   timeWindow: 2.0,
-  sourceType: 'mic',    // Tracks current active input selection ('mic' or 'tab')
-  activeStream: null,    // Holds reference to stream tracks for explicit closure
-  showWireframe: true // Track wireframe visibility state
+  sourceType: 'mic',    
+  activeStream: null,    
+  showWireframe: true 
 };
 
 export async function startAudio(onSuccess) {
@@ -29,20 +29,16 @@ export async function startAudio(onSuccess) {
   try {
     let stream;
     if (audioState.sourceType === 'tab') {
-      // Must request video: true, otherwise browser rejects promise
       stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true
       });
 
-      // Stop the video track immediately to prevent CPU consumption
       stream.getVideoTracks().forEach(track => track.stop());
 
-      // If the stream contains no audio track
       if (stream.getAudioTracks().length === 0) {
         stream.getTracks().forEach(track => track.stop());
 
-        // Check userAgent to identify Firefox
         const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
         
         if (isFirefox) {

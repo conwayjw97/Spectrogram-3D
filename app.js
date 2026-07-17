@@ -37,6 +37,9 @@ let sideLine, sideLineGeometry, historyAmplitudes;
 let avgSideLine, avgSideLineGeometry, historyAvgAmplitudes;
 let backLine, backLineGeometry, peakSpectrum;
 
+// Persistent cache to smoothly blend historical frames over the time axis
+let previousFrameData = null;
+
 // 3. Reusable Visualiser Element Lifecycle Setup
 function setupVisualiserElements() {
   // Clear existing items from the scene if they exist
@@ -55,13 +58,18 @@ function setupVisualiserElements() {
   if (avgSideLineGeometry) avgSideLineGeometry.dispose();
   if (backLineGeometry) backLineGeometry.dispose();
 
-  // Reset circular pointer on reallocation
+  // Reset circular pointer and frame history caches on reallocation
   writeIndex = 0;
+  previousFrameData = new Float32Array(freqSamples);
 
   // Re-allocate Audio Texture Map Configuration
   const size = timeSamples * freqSamples;
   audioData = new Uint8Array(4 * size);
+  
   dataTexture = new THREE.DataTexture(audioData, freqSamples, timeSamples, THREE.RGBAFormat);
+  // Enable bilinear filtering to smooth out samples between texture pixels
+  dataTexture.minFilter = THREE.LinearFilter;
+  dataTexture.magFilter = THREE.LinearFilter;
   dataTexture.needsUpdate = true;
 
   // Re-assemble Main Dual Mesh Terrain Layouts with dynamic uniforms
@@ -71,7 +79,7 @@ function setupVisualiserElements() {
   const shaderUniforms = {
     u_audioTexture: { value: dataTexture },
     u_writeIndex: { value: 0.0 },
-    u_timeSamples: { value: timeSamples } // Pass precision limits down to GPU
+    u_timeSamples: { value: timeSamples }
   };
 
   solidMesh = new THREE.Mesh(geometry, new THREE.ShaderMaterial({
@@ -135,14 +143,13 @@ function setupVisualiserElements() {
   backLine = new THREE.Line(backLineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 10 }));
   scene.add(backLine);
 
-  // Calculate dynamic opacity: 128 precision sits at 0.6, 1024 precision drops to ~0.075
   const wireOpacity = Math.max(0.03, 0.6 * (128 / freqSamples));
 
   const wireUniforms = {
     u_audioTexture: { value: dataTexture },
     u_writeIndex: { value: 0.0 },
     u_opacity: { value: wireOpacity },
-    u_timeSamples: { value: timeSamples } // Pass precision limits down to wire material
+    u_timeSamples: { value: timeSamples }
   };
 
   wireframeMesh = new THREE.Mesh(geometry, new THREE.ShaderMaterial({
@@ -153,7 +160,6 @@ function setupVisualiserElements() {
   }));
   wireframeMesh.material.uniforms.u_audioTexture.value = dataTexture;
 
-  // Explicitly match visibility state right away to prevent lag rendering
   wireframeMesh.visible = audioState.showWireframe;
   scene.add(wireframeMesh);
 }
@@ -176,13 +182,11 @@ initUI(scene, { width, depth, freqSamples, timeSamples });
 const precisionSlider = document.getElementById('precisionSlider');
 const precisionLabel = document.getElementById('precisionLabel');
 
-// Update UI text smoothly while sliding
 precisionSlider.addEventListener('input', (e) => {
   const val = e.target.value;
   precisionLabel.textContent = `Mesh Precision: ${val}x${val}`;
 });
 
-// Trigger expensive geometry allocation only on mouse release
 precisionSlider.addEventListener('change', (e) => {
   const val = parseInt(e.target.value);
   timeSamples = val;
@@ -201,7 +205,6 @@ function animate() {
   requestAnimationFrame(animate);
   controls.update();
 
-  // Explicitly sync visibility state on every frame redraw outside calculation loops
   if (wireframeMesh) {
     wireframeMesh.visible = audioState.showWireframe;
   }
@@ -213,16 +216,22 @@ function animate() {
     const maxIndex = Math.floor((audioState.targetFrequency / audioState.context.sampleRate) * audioState.analyser.fftSize);
     const indexRange = Math.max(1, maxIndex - minIndex);
 
+    // Generate a smoothly interpolated snapshot of the current frame's frequency data
+    const currentFrameData = new Float32Array(freqSamples);
     let currentFramePeak = 0;
     let currentFrameSum = 0;
     const linePositions = frontLineGeometry.attributes.position.array;
 
     for (let i = 0; i < freqSamples; i++) {
-      const mappedIndex = Math.min(
-        minIndex + Math.floor((i / (freqSamples - 1)) * indexRange), 
-        audioState.dataArray.length - 1
-      );
-      const val = audioState.dataArray[mappedIndex];
+      const continuousIndex = minIndex + (i / (freqSamples - 1)) * indexRange;
+      const indexLow = Math.floor(continuousIndex);
+      const indexHigh = Math.min(indexLow + 1, audioState.dataArray.length - 1);
+      const weight = continuousIndex - indexLow;
+      
+      // Perform Linear Interpolation (lerp) across the frequency arrays
+      const val = audioState.dataArray[indexLow] * (1.0 - weight) + audioState.dataArray[indexHigh] * weight;
+      
+      currentFrameData[i] = val;
       if (val > currentFramePeak) currentFramePeak = val;
       currentFrameSum += val;
       
@@ -239,10 +248,15 @@ function animate() {
     const targetInterval = (audioState.timeWindow * 1000) / timeSamples;
     let updatedThisFrame = false;
 
+    // Calculate total upcoming intervals matching this frame step for time interpolation
+    const stepsToTake = Math.floor(timeAccumulator / targetInterval);
+    let stepCount = 0;
+
     // Process all units of elapsed time that built up during this frame step
     while (timeAccumulator >= targetInterval) {
       timeAccumulator -= targetInterval;
       updatedThisFrame = true;
+      stepCount++;
 
       // Advance circular ring buffer row pointer
       writeIndex = (writeIndex + 1) % timeSamples;
@@ -254,13 +268,12 @@ function animate() {
         historyAvgAmplitudes[i] = historyAvgAmplitudes[i - 1];
       }
 
-      // Commit the current snapshot directly into the designated circular row index
+      // Linear blend factor handling historical rows matching fractional elapsed frame rendering times
+      const t = stepsToTake > 0 ? stepCount / stepsToTake : 1.0;
+
+      // Commit the blended, smooth snapshot into the designated circular row index
       for (let i = 0; i < freqSamples; i++) {
-        const mappedIndex = Math.min(
-          minIndex + Math.floor((i / (freqSamples - 1)) * indexRange), 
-          audioState.dataArray.length - 1
-          );
-        const val = audioState.dataArray[mappedIndex];
+        const val = previousFrameData[i] * (1.0 - t) + currentFrameData[i] * t;
         const index = rowOffset + (i * 4);
         audioData[index] = val;
         audioData[index + 1] = val;
@@ -272,7 +285,9 @@ function animate() {
       historyAvgAmplitudes[0] = (currentFrameAvg / 255.0) * 25.0;
     }
 
-    // Only recalculate layout uniforms and textures once per frame update
+    // Preserve current processed state data across animation boundaries
+    previousFrameData.set(currentFrameData);
+
     if (updatedThisFrame) {
       // Calculate Peak Hold across the circular grid
       for (let j = 0; j < freqSamples; j++) {
@@ -285,7 +300,6 @@ function animate() {
         peakSpectrum[j] = (maxBinVal / 255.0) * 25.0;
       }
 
-      // Sync normalized uniform pointer location with custom shaders
       const normalizedWriteIndex = writeIndex / timeSamples;
       solidMesh.material.uniforms.u_writeIndex.value = normalizedWriteIndex;
       wireframeMesh.material.uniforms.u_writeIndex.value = normalizedWriteIndex;
