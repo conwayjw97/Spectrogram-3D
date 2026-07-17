@@ -2,7 +2,7 @@
 
 A real-time, hardware-accelerated 3D audio spectrogram visualiser that renders incoming audio frequencies from a browser tab or microphone as a dynamic, scrolling terrain. Built using Three.js, custom GLSL shaders, and the Web Audio API.
 
-<img width="1230" height="1023" alt="image" src="https://github.com/user-attachments/assets/4bb04dac-8bd9-4bda-b1f8-35a7df55e1d7" />
+<img width="1274" height="1305" alt="Untitled" src="https://github.com/user-attachments/assets/8aa86da7-4d85-4b80-9efb-3861a02cfe81" />
 
 ## Try it out
 
