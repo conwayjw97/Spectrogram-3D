@@ -67,7 +67,8 @@ function setupVisualiserElements() {
   const shaderUniforms = {
     u_audioTexture: { value: dataTexture },
     u_writeIndex: { value: 0.0 },
-    u_timeSamples: { value: timeSamples }
+    u_timeSamples: { value: timeSamples },
+    u_colorScheme: { value: audioState.colorScheme } 
   };
 
   solidMesh = new THREE.Mesh(geometry, new THREE.ShaderMaterial({
@@ -212,6 +213,13 @@ function animate() {
 
   if (wireframeMesh) {
     wireframeMesh.visible = audioState.showWireframe;
+  }
+
+  if (solidMesh && solidMesh.material.uniforms.u_colorScheme) {
+    solidMesh.material.uniforms.u_colorScheme.value = audioState.colorScheme;
+  }
+  if (wireframeMesh && wireframeMesh.material.uniforms.u_colorScheme) {
+    wireframeMesh.material.uniforms.u_colorScheme.value = audioState.colorScheme;
   }
 
   if (audioState.isRecording && audioState.analyser) {
