@@ -1,86 +1,53 @@
 export const vertexShader = `
   uniform sampler2D u_audioTexture;
-  uniform float u_writeIndex;   
-  uniform float u_timeSamples;  
-  varying vec2 vUv;
-  varying float vElevation;     
-
+  uniform float u_writeIndex;
+  uniform float u_timeSamples;
+  
+  varying float v_amplitude;
+  
   void main() {
-    vUv = uv;
-
-    float correctedY = (uv.y * (u_timeSamples - 1.0)) / u_timeSamples;
-    vec2 circularUv = vec2(uv.x, mod(u_writeIndex - correctedY, 1.0));
-
-    vec4 audioColor = texture2D(u_audioTexture, circularUv);
-    float displacement = audioColor.r * 25.0;
+    vec2 uv = uv;
+    uv.y = fract(uv.y + u_writeIndex);
     
-    vElevation = displacement;
-
-    vec3 displacedPosition = position;
-    displacedPosition.y += displacement;
-
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(displacedPosition, 1.0);
+    vec4 audioData = texture2D(u_audioTexture, uv);
+    float height = audioData.r;
+    v_amplitude = height;
+    
+    vec3 newPosition = position;
+    newPosition.y = height * 25.0;
+    
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
   }
 `;
 
 export const solidFragmentShader = `
-  uniform int u_colorScheme;
-  varying float vElevation;
-  
+  uniform vec3 u_colorBase;
+  uniform vec3 u_colorLow;
+  uniform vec3 u_colorMid;
+  uniform vec3 u_colorHigh;
+
+  varying float v_amplitude;
+
   void main() {
-    // Normalise the world-space vertex height into a 0.0 to 1.0 factor
-    float factor = clamp(vElevation / 25.0, 0.0, 1.0);
-    vec3 finalColour = vec3(0.0);
+    float h = clamp(v_amplitude, 0.0, 1.0);
+    vec3 col;
 
-    if (u_colorScheme == 0) {
-        // Standard: Dark Green -> Neon Green -> Yellow -> Red
-        if (factor < 0.33) {
-            finalColour = mix(vec3(0.0, 0.25, 0.0), vec3(0.0, 1.0, 0.0), factor / 0.33);
-        } else if (factor < 0.66) {
-            finalColour = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0), (factor - 0.33) / 0.33);
-        } else {
-            finalColour = mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (factor - 0.66) / 0.34);
-        }
-    } 
-    else if (u_colorScheme == 1) {
-        // Synthwave: Neon Purple -> Pink -> Orange -> Yellow
-        if (factor < 0.33) {
-            finalColour = mix(vec3(0.2, 0.0, 0.4), vec3(0.9, 0.1, 0.5), factor * 3.03);
-        } else if (factor < 0.66) {
-            finalColour = mix(vec3(0.9, 0.1, 0.5), vec3(1.0, 0.5, 0.0), (factor - 0.33) * 3.03);
-        } else {
-            finalColour = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.9, 0.2), (factor - 0.66) * 2.94);
-        }
-    }
-    else if (u_colorScheme == 2) {
-        // Glacier: Deep Blue -> Electric Cyan -> White
-        if (factor < 0.5) {
-            finalColour = mix(vec3(0.0, 0.1, 0.4), vec3(0.0, 0.8, 0.9), factor * 2.0);
-        } else {
-            finalColour = mix(vec3(0.0, 0.8, 0.9), vec3(1.0, 1.0, 1.0), (factor - 0.5) * 2.0);
-        }
-    }
-    else if (u_colorScheme == 3) {
-        // Magma: Dark Red -> Fiery Orange -> Bright Yellow
-        if (factor < 0.5) {
-            finalColour = mix(vec3(0.3, 0.0, 0.0), vec3(0.9, 0.3, 0.0), factor * 2.0);
-        } else {
-            finalColour = mix(vec3(0.9, 0.3, 0.0), vec3(1.0, 0.9, 0.1), (factor - 0.5) * 2.0);
-        }
-    }
-    else if (u_colorScheme == 4) {
-        // Cyberpunk: Neon Teal -> Acid Magenta
-        finalColour = mix(vec3(0.0, 0.9, 0.8), vec3(0.9, 0.0, 0.5), factor);
+    if (h < 0.3333) {
+      col = mix(u_colorBase, u_colorLow, h * 3.0);
+    } else if (h < 0.6666) {
+      col = mix(u_colorLow, u_colorMid, (h - 0.3333) * 3.0);
+    } else {
+      col = mix(u_colorMid, u_colorHigh, (h - 0.6666) * 3.0);
     }
 
-    gl_FragColor = vec4(finalColour, 1.0);
+    gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 export const wireFragmentShader = `
   uniform float u_opacity;
-
-  void main() { 
-      gl_FragColor = vec4(0.0, 0.0, 0.0, u_opacity); 
+  
+  void main() {
+    gl_FragColor = vec4(1.0, 1.0, 1.0, u_opacity);
   }
 `;

@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { vertexShader, solidFragmentShader, wireFragmentShader } from './shaders.js';
 import { audioState } from './audio.js';
 import { initUI } from './ui.js';
+import { COLOUR_SCHEMES, applyColourScheme } from './colors.js';
 
 // 1. Initialise Scene and Viewport Engine
 const scene = new THREE.Scene();
@@ -103,19 +104,26 @@ function setupVisualiserElements() {
   geometry = new THREE.PlaneGeometry(width, depth, freqSamples - 1, timeSamples - 1);
   geometry.rotateX(-Math.PI / 2);
 
+  const activeScheme = COLOUR_SCHEMES[audioState.colorScheme] || COLOUR_SCHEMES.standard;
+
   const shaderUniforms = {
     u_audioTexture: { value: dataTexture },
     u_writeIndex: { value: 0.0 },
     u_timeSamples: { value: timeSamples },
-    u_colorScheme: { value: audioState.colorScheme } 
+    u_colorBase: { value: activeScheme.base.clone() },
+    u_colorLow:  { value: activeScheme.low.clone() },
+    u_colorMid:  { value: activeScheme.mid.clone() },
+    u_colorHigh: { value: activeScheme.high.clone() }
   };
 
   solidMesh = new THREE.Mesh(geometry, new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.clone(shaderUniforms),
-    vertexShader, 
+    vertexShader,
     fragmentShader: solidFragmentShader,
     side: THREE.DoubleSide,
-    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+    polygonOffset: true, 
+    polygonOffsetFactor: 1, 
+    polygonOffsetUnits: 1
   }));
   solidMesh.material.uniforms.u_audioTexture.value = dataTexture;
   scene.add(solidMesh);
@@ -319,11 +327,8 @@ function animate() {
     wireframeMesh.visible = audioState.showWireframe;
   }
 
-  if (solidMesh && solidMesh.material.uniforms.u_colorScheme) {
-    solidMesh.material.uniforms.u_colorScheme.value = audioState.colorScheme;
-  }
-  if (wireframeMesh && wireframeMesh.material.uniforms.u_colorScheme) {
-    wireframeMesh.material.uniforms.u_colorScheme.value = audioState.colorScheme;
+  if (solidMesh) {
+    applyColourScheme(solidMesh.material, audioState.colorScheme);
   }
 
   if (audioState.isRecording && audioState.analyser) {
@@ -399,7 +404,6 @@ function animate() {
 
     previousFrameData.set(currentFrameData);
 
-    // Inside the updatedThisFrame block in animate()
     if (updatedThisFrame) {
       for (let j = 0; j < freqSamples; j++) {
         let maxBinVal = 0;
