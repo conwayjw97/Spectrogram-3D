@@ -1,22 +1,18 @@
 export const vertexShader = `
   uniform sampler2D u_audioTexture;
-  uniform float u_writeIndex;
-  uniform float u_timeSamples;
-  
-  varying float v_amplitude;
-  
+  varying vec2 vUv;
+
   void main() {
-    vec2 uv = uv;
-    uv.y = fract(uv.y + u_writeIndex);
-    
-    vec4 audioData = texture2D(u_audioTexture, uv);
-    float height = audioData.r;
-    v_amplitude = height;
-    
-    vec3 newPosition = position;
-    newPosition.y = height * 25.0;
-    
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+    vUv = uv;
+
+    // Sample the texture directly using UV coordinates
+    vec4 audioSample = texture2D(u_audioTexture, uv);
+
+    vec3 pos = position;
+    // Scale vertex height directly based on red channel height
+    pos.y = (audioSample.r) * 25.0;
+
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
 `;
 
