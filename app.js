@@ -201,15 +201,14 @@ function setupVisualiserElements() {
   // Hover Guide Indicator (Vertical Line + Peak Marker Dot)
   hoverIndicatorGroup = new THREE.Group();
   const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-  const markerMaterial = new THREE.MeshBasicMaterial({
+  hoverLine = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false }));
+  hoverDot = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshBasicMaterial({
     color: 0xffffff,
     depthTest: true,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1
-  });
-  hoverLine = new THREE.Line(lineGeom, markerMaterial);
-  hoverDot = new THREE.Mesh(new THREE.SphereGeometry(0.6, 4, 4), markerMaterial);
+  }));
 
   hoverIndicatorGroup.add(hoverLine);
   hoverIndicatorGroup.add(hoverDot);
