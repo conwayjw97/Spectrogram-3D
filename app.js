@@ -93,10 +93,11 @@ function setupVisualiserElements() {
   const size = timeSamples * freqSamples;
   audioData = new Uint8Array(4 * size);
   
-  // Switched to NearestFilter to stop instantaneous time-bleeding across the moving ring buffer seam
   dataTexture = new THREE.DataTexture(audioData, freqSamples, timeSamples, THREE.RGBAFormat);
-  dataTexture.minFilter = THREE.NearestFilter;
-  dataTexture.magFilter = THREE.NearestFilter;
+  dataTexture.minFilter = THREE.LinearFilter;
+  dataTexture.magFilter = THREE.LinearFilter;
+  dataTexture.wrapS = THREE.ClampToEdgeWrapping;
+  dataTexture.wrapT = THREE.ClampToEdgeWrapping;
   dataTexture.needsUpdate = true;
 
   geometry = new THREE.PlaneGeometry(width, depth, freqSamples - 1, timeSamples - 1);
@@ -370,9 +371,11 @@ function animate() {
       updatedThisFrame = true;
       stepCount++;
 
-      writeIndex = (writeIndex + 1) % timeSamples;
-      const rowOffset = writeIndex * freqSamples * 4;
+      // 1. Shift all texture rows down by one row space to clear room at the top
+      const rowSize = freqSamples * 4;
+      audioData.copyWithin(rowSize, 0, audioData.length - rowSize);
 
+      // 2. Shift the perimeter history arrays down
       for (let i = timeSamples - 1; i > 0; i--) {
         historyAmplitudes[i] = historyAmplitudes[i - 1];
         historyAvgAmplitudes[i] = historyAvgAmplitudes[i - 1];
@@ -380,9 +383,10 @@ function animate() {
 
       const t = stepsToTake > 0 ? stepCount / stepsToTake : 1.0;
 
+      // 3. Inject the new frame data directly at the beginning of the texture (Row 0)
       for (let i = 0; i < freqSamples; i++) {
         const val = previousFrameData[i] * (1.0 - t) + currentFrameData[i] * t;
-        const index = rowOffset + (i * 4);
+        const index = i * 4; // Row 0 offset
         audioData[index] = val;
         audioData[index + 1] = val;
         audioData[index + 2] = val;
@@ -395,6 +399,7 @@ function animate() {
 
     previousFrameData.set(currentFrameData);
 
+    // Inside the updatedThisFrame block in animate()
     if (updatedThisFrame) {
       for (let j = 0; j < freqSamples; j++) {
         let maxBinVal = 0;
@@ -406,9 +411,9 @@ function animate() {
         peakSpectrum[j] = (maxBinVal / 255.0) * 25.0;
       }
 
-      const normalizedWriteIndex = writeIndex / timeSamples;
-      solidMesh.material.uniforms.u_writeIndex.value = normalizedWriteIndex;
-      wireframeMesh.material.uniforms.u_writeIndex.value = normalizedWriteIndex;
+      // Lock the offset uniform to 0.0 since the data layout is no longer rolling
+      solidMesh.material.uniforms.u_writeIndex.value = 0.0;
+      wireframeMesh.material.uniforms.u_writeIndex.value = 0.0;
 
       dataTexture.needsUpdate = true;
     }
