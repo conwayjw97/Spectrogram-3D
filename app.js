@@ -202,7 +202,7 @@ function setupVisualiserElements() {
   hoverIndicatorGroup = new THREE.Group();
   const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
   hoverLine = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false }));
-  hoverDot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
+  hoverDot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
 
   hoverIndicatorGroup.add(hoverLine);
   hoverIndicatorGroup.add(hoverDot);
