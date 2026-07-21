@@ -201,10 +201,10 @@ function setupVisualiserElements() {
   // Hover Guide Indicator (Vertical Line + Peak Marker Dot)
   hoverIndicatorGroup = new THREE.Group();
   const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-  hoverLine = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0x00ffff, depthTest: false }));
+  hoverLine = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false }));
   hoverDot = new THREE.Mesh(
     new THREE.SphereGeometry(0.6, 8, 8),
-    new THREE.MeshBasicMaterial({ color: 0x00ffff, depthTest: false })
+    new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false })
   );
 
   hoverIndicatorGroup.add(hoverLine);
